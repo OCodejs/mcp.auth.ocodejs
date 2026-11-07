@@ -1,49 +1,84 @@
-# Velclaw Identity Auth
+# OCode.js Authentication & Identity
 
-Dark, responsive authentication foundation for the Velclaw ecosystem.
+Authentication and account identity service for the OCode.js ecosystem.
 
-## Included
+## Features
 
-- Google OAuth and GitHub OAuth using Auth.js.
-- Email/password registration and login, with a protected account page and sign-out.
-- Password hashing with bcrypt (12 rounds); passwords are never stored in plaintext.
-- Prisma/PostgreSQL persistence for users, provider accounts, and sessions.
-- Environment-variable configuration; no real credentials belong in Git.
-- Separate feature branch so the current production deployment is not overwritten.
+- Auth.js v5 with Google OAuth, GitHub OAuth, and email/password credentials.
+- bcryptjs password hashing; plaintext passwords are never stored.
+- Prisma + PostgreSQL persistence for users, provider accounts, sessions, and profiles.
+- Automatic profile creation for email registration and OAuth sign-up.
+- Public profiles at `/u/[username]`.
+- Profile editing, GitHub username linking, follower/following graph, stars, and public activity.
+- Readiness endpoint at `GET /api/health`.
 
-## Required environment variables
+## Runtime configuration
 
-See [`.env.example`](./.env.example). Configure values in local environment or Vercel project settings; do not commit secrets.
+See [`.env.example`](./.env.example). Configure secrets only in the intended environment; never commit credentials.
 
-- `DATABASE_URL`: PostgreSQL URL.
-- `AUTH_SECRET`: cryptographically random secret.
-- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`: Google OAuth app credentials.
-- `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`: GitHub OAuth app credentials.
-- `AUTH_URL`: canonical application URL in production.
+- `DATABASE_URL`: dedicated PostgreSQL connection string (pooled Neon URL recommended for serverless runtime).
+- `AUTH_SECRET`: cryptographically random Auth.js secret.
+- `AUTH_URL`: canonical application URL.
+- `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`.
+- `AUTH_GITHUB_ID` / `AUTH_GITHUB_SECRET`.
 
-OAuth callback URLs are `https://YOUR-DOMAIN/api/auth/callback/google` and `https://YOUR-DOMAIN/api/auth/callback/github`.
+OAuth callback URLs:
 
-## Local setup
+- `https://YOUR-DOMAIN/api/auth/callback/google`
+- `https://YOUR-DOMAIN/api/auth/callback/github`
 
-1. Install dependencies with `npm install`.
-2. Set environment variables in an untracked `.env` file.
-3. Run `npx prisma generate`.
-4. Review the database target and backup policy, then apply the Prisma schema to the intended database.
-5. Run `npm run dev`.
+## Local development
 
-## Readiness endpoint
+1. Install dependencies: `npm install`.
+2. Configure an untracked `.env` with a dedicated development database and auth credentials.
+3. Generate Prisma Client: `npx prisma generate`.
+4. Apply reviewed migrations to the development database: `npx prisma migrate deploy`.
+5. Start the app: `npm run dev`.
 
-- `GET /api/health` returns a minimal, non-cacheable readiness response.
-- It requires the Preview/Production runtime to provide `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, and both Google/GitHub OAuth client credentials.
-- It runs a read-only `SELECT 1` against PostgreSQL before reporting `ready`.
-- Missing configuration returns `503 not_configured`; database connectivity failure returns `503 unavailable`.
-- The response never reveals which secret is missing, database errors, connection strings, or provider credentials.
-- A ready response verifies configuration and database connectivity only; it does not replace end-to-end registration, OAuth callback, session, and logout tests.
+Do not use `prisma db push` against a shared or production database.
 
-## Deployment gate
+## API overview
 
-This branch is not a production release. Before connecting it to the existing Vercel project, configure a dedicated preview database and OAuth callback URLs, run a Preview deployment, and verify registration, duplicate-email handling, invalid-password handling, OAuth callbacks, session persistence, and sign-out. Do not run schema changes against a production database without explicit review and backup.
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/register` | POST | Register account and create profile transactionally |
+| `/api/auth/[...nextauth]` | GET, POST | Auth.js sign-in, callbacks, and session |
+| `/api/health` | GET | Configuration and PostgreSQL readiness |
+| `/api/profile/me` | GET, PATCH | Read/update authenticated profile |
+| `/api/profile/github` | PATCH | Set public GitHub username |
+| `/api/profile/stars` | GET, POST, DELETE | Manage authenticated user's stars |
+| `/api/profiles/[username]` | GET | Public profile and social counts |
+| `/api/profiles/[username]/follow` | POST, DELETE | Follow/unfollow a public profile |
+| `/api/profiles/[username]/followers` | GET | List followers |
+| `/api/profiles/[username]/following` | GET | List followed profiles |
+| `/api/profiles/[username]/stars` | GET | Public stars |
+| `/api/profiles/[username]/activity` | GET | Public activity feed |
+| `/api/profiles/[username]/github` | GET | Public GitHub profile/repository summary |
 
-## Important remaining hardening
+## Health semantics
 
-Before public production use, add a managed rate limiter for registration/login, email verification and password reset, automated tests, and end-to-end verification. The registration endpoint rejects mismatched Origin headers, but this is not a substitute for rate limiting. OAuth credentials and database connectivity must be configured in Vercel before those flows can work end-to-end.
+- `200 ready`: required environment variables exist and a read-only PostgreSQL `SELECT 1` succeeds.
+- `503 not_configured`: required settings are absent.
+- `503 unavailable`: settings exist but database connectivity failed.
+
+Health readiness does not prove OAuth callbacks or end-to-end registration work. Those require Preview tests.
+
+## Preview release gate
+
+This repository is linked to Vercel. Work on this branch is Preview-only. Before enabling end-to-end sign-up:
+
+1. Provision a dedicated OCode.js Preview PostgreSQL database. Do not reuse any Velclaw database or another application's database.
+2. Add the database URL and OAuth settings to Vercel Preview only, scoped to this branch where supported.
+3. Apply committed Prisma migrations to that Preview database.
+4. Verify health, email registration, duplicate-email handling, invalid credentials, Google/GitHub callbacks, session persistence, profile creation/editing, follow/unfollow, stars, activity, and logout.
+5. Confirm the deployment target is Preview, not Production.
+
+Do not merge this branch or deploy Production without explicit authorization.
+
+## Security follow-up before public production use
+
+- Add a managed rate limiter to registration and credential login.
+- Add email verification and password reset.
+- Add end-to-end OAuth/session tests.
+- Review dependency audit findings and update vulnerable packages in a separate tested change.
+- Add abuse controls and pagination/retention policies for public activity.
