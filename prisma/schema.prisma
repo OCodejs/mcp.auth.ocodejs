@@ -1,0 +1,134 @@
+generator client {
+  provider   = "prisma-client-js"
+  engineType = "client"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  accounts      Account[]
+  sessions      Session[]
+  profile       Profile?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  @@unique([identifier, token])
+}
+
+model Profile {
+  id                String           @id @default(cuid())
+  userId            String           @unique
+  username          String           @unique @db.VarChar(30)
+  displayName       String?          @db.VarChar(80)
+  bio               String?          @db.VarChar(280)
+  avatarUrl         String?          @db.Text
+  websiteUrl        String?          @db.VarChar(2048)
+  location          String?          @db.VarChar(120)
+  timezone          String?          @db.VarChar(80)
+  statusText        String?          @db.VarChar(80)
+  readme            String?          @db.Text
+  githubUsername    String?          @unique @db.VarChar(39)
+  isPublic          Boolean          @default(true)
+  showActivity      Boolean          @default(true)
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+  user              User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  links             ProfileLink[]
+  followers         ProfileFollow[] @relation("ProfileFollowed")
+  following         ProfileFollow[] @relation("ProfileFollower")
+  stars             ProfileStar[]
+  activities        ProfileActivity[]
+
+  @@index([isPublic, username])
+}
+
+model ProfileLink {
+  id        String   @id @default(cuid())
+  profileId String
+  kind      String   @db.VarChar(32)
+  label     String   @db.VarChar(60)
+  url       String   @db.VarChar(2048)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, sortOrder])
+}
+
+model ProfileFollow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followedId  String
+  createdAt   DateTime @default(now())
+  follower    Profile  @relation("ProfileFollower", fields: [followerId], references: [id], onDelete: Cascade)
+  followed    Profile  @relation("ProfileFollowed", fields: [followedId], references: [id], onDelete: Cascade)
+
+  @@unique([followerId, followedId])
+  @@index([followedId, createdAt])
+  @@index([followerId, createdAt])
+}
+
+model ProfileStar {
+  id           String   @id @default(cuid())
+  profileId    String
+  resourceType String   @db.VarChar(32)
+  resourceId   String   @db.VarChar(255)
+  createdAt    DateTime @default(now())
+  profile      Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([profileId, resourceType, resourceId])
+  @@index([profileId, createdAt])
+  @@index([resourceType, resourceId])
+}
+
+model ProfileActivity {
+  id          String   @id @default(cuid())
+  profileId   String
+  eventType   String   @db.VarChar(40)
+  summary     String   @db.VarChar(240)
+  resourceUrl String?  @db.VarChar(2048)
+  metadata    Json?
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@index([profileId, isPublic, createdAt])
+}
+
