@@ -1,23 +1,45 @@
-# Account Auth — isolated Preview environment
+# OCode.js Auth — Preview environment
 
 ## Purpose
 
-This branch is intended to trigger a Cloudflare Workers Preview build for the Auth.js application. The existing `mcp-server-auth` production deployment command remains disabled; non-production branches use the Workers Builds Preview command.
+This guide describes the isolated Vercel Preview environment for `OCodejs/mcp.auth.ocodejs`.
 
-## Preview isolation
+## Isolation requirements
 
-- Preview URLs are protected by the existing Cloudflare Access policy named `Cloudflare Workers Preview URLs`, which allows Cloudflare account members.
-- Workers Previews do not inherit production settings. Preview-specific variables, secrets and resource bindings must be configured independently.
-- The production D1 database `ocodejs-auth-db` is not a PostgreSQL replacement and must not be attached to this Prisma application.
-- No production database, OAuth credential or account data is copied into Preview.
+- Use a dedicated PostgreSQL database for this OCode.js auth service.
+- Never attach a Velclaw database or another OCode.js application's database.
+- Store Preview credentials as Vercel Preview environment variables; scope branch-specific values to `fix/profile-username-types-ci` where supported.
+- Do not change Production environment variables, domains, deployment targets, or database bindings.
+- Do not place OAuth client secrets, Auth.js secrets, or database URLs in Git.
 
-## Initial validation gate
+## Required Preview variables
 
-The first Preview build is for application boot and route verification only. It is expected to report `503 not_configured` from `GET /api/health` until a dedicated Preview PostgreSQL database, `DATABASE_URL`, `AUTH_SECRET`, `AUTH_URL`, GitHub OAuth credentials and Google OAuth credentials are configured in the Preview environment.
+- `DATABASE_URL`: dedicated Preview PostgreSQL connection URL.
+- `AUTH_SECRET`: independent Preview secret.
+- `AUTH_URL`: exact Vercel Preview URL.
+- `AUTH_GITHUB_ID` and `AUTH_GITHUB_SECRET`.
+- `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`.
 
-Do not enable registration, login or OAuth controls as production-ready until the health endpoint reports ready and registration, password validation, provider callbacks, session persistence and logout pass end-to-end tests.
+Configure OAuth callback URLs for the exact Preview host:
+
+- `https://PREVIEW-HOST/api/auth/callback/github`
+- `https://PREVIEW-HOST/api/auth/callback/google`
+
+## Database migration
+
+Review `prisma/schema.prisma` and all committed SQL migrations first. Apply migrations only to the dedicated Preview database using `npx prisma migrate deploy`. Never run migrations against Production.
+
+## Validation gate
+
+1. Confirm the deployment has Vercel target `preview`.
+2. Confirm `GET /api/health` returns `200` with `state: ready`.
+3. Test email registration and verify a Profile row is created in the same transaction.
+4. Test Google and GitHub OAuth callbacks and verify each new account receives one profile.
+5. Test login, logout, session persistence, profile editing, GitHub profile linking, follow/unfollow, stars, and activity visibility.
+6. Inspect Preview runtime logs for errors and confirm no secrets are logged.
+
+A successful build alone is not a completed auth deployment. Keep the PR open and unmerged until the dedicated database and OAuth credentials are configured and end-to-end checks pass.
 
 ## Production safety
 
-- Production build command is intentionally set to a no-op.
-- This Preview branch must not change production Worker routes, production secrets, DNS, or database state.
+Production environment variables and the existing Production deployment must remain unchanged. No production migration, domain switch, or merge is authorized by this Preview work.
