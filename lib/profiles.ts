@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
-import { normalizeProfileUsername } from "@/lib/profile-username";
+import { normalizeProfileUsername } from "@/lib/profile-username.mjs";
 
 type ProfileDb = Pick<Prisma.TransactionClient, "profile"> | Pick<PrismaClient, "profile">;
 type UserIdentity = { id: string; name?: string | null; email?: string | null; image?: string | null };
