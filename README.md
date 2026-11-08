@@ -27,6 +27,28 @@ OAuth callback URLs:
 - `https://YOUR-DOMAIN/api/auth/callback/google`
 - `https://YOUR-DOMAIN/api/auth/callback/github`
 
+## Secure BYOK / Token Vault
+
+The account area includes a server-mediated API key manager at `/account/keys`.
+Users can paste a provider key or import a supported `.env` / JSON file. File parsing
+happens locally in the browser; only the selected key value is sent over HTTPS to the
+server. The browser receives metadata only and cannot reveal a stored key.
+
+The Next.js server signs a short-lived (60-second) HS256 assertion using
+`TOKEN_VAULT_ASSERTION_SECRET`. The Cloudflare Token Vault verifies that assertion,
+scopes every operation to the immutable Auth.js user ID, and stores the credential
+using AES-GCM encryption in the dedicated Staging D1 database. The assertion secret
+must exist only in server-side Preview environment variables and the Staging Worker
+secret store. Do not add it to `NEXT_PUBLIC_*`, source control, client bundles, or logs.
+
+Required Preview-only settings:
+- `TOKEN_VAULT_URL`: the dedicated OCode.js Token Vault Staging Worker URL.
+- `TOKEN_VAULT_ASSERTION_SECRET`: shared HMAC key, configured as a Vercel encrypted Preview variable and a Cloudflare Worker secret.
+
+The service API never returns plaintext keys to the browser. The admin Vault view is
+kept separate from user-owned credentials. Do not enable Production until security
+tests, provider proxy integration, and secret-redaction checks pass.
+
 ## Local development
 
 1. Install dependencies: `npm install`.
@@ -44,6 +66,9 @@ Do not use `prisma db push` against a shared or production database.
 | `/api/register` | POST | Register account and create profile transactionally |
 | `/api/auth/[...nextauth]` | GET, POST | Auth.js sign-in, callbacks, and session |
 | `/api/health` | GET | Configuration and PostgreSQL readiness |
+| `/api/vault/tokens` | GET, POST | Manage per-user encrypted BYOK credentials |
+| `/api/vault/tokens/[id]` | DELETE | Delete an owned credential |
+| `/api/vault/chat` | POST | Server-side OpenAI, Anthropic, and Gemini gateway using an owned key |
 | `/api/profile/me` | GET, PATCH | Read/update authenticated profile |
 | `/api/profile/github` | PATCH | Set public GitHub username |
 | `/api/profile/stars` | GET, POST, DELETE | Manage authenticated user's stars |

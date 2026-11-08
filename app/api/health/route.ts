@@ -6,11 +6,7 @@ export const dynamic = "force-dynamic";
 const REQUIRED_AUTH_SETTINGS = [
   "DATABASE_URL",
   "AUTH_SECRET",
-  "AUTH_URL",
-  "AUTH_GITHUB_ID",
-  "AUTH_GITHUB_SECRET",
-  "AUTH_GOOGLE_ID",
-  "AUTH_GOOGLE_SECRET"
+  "AUTH_URL"
 ] as const;
 
 function response(body: Record<string, unknown>, status: number) {
@@ -26,6 +22,10 @@ function response(body: Record<string, unknown>, status: number) {
 
 export async function GET() {
   const checkedAt = new Date().toISOString();
+  const providers = {
+    google: Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET),
+    github: Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET)
+  };
   const configured = REQUIRED_AUTH_SETTINGS.every((key) => {
     const value = process.env[key];
     return typeof value === "string" && value.trim().length > 0;
@@ -36,6 +36,7 @@ export async function GET() {
       service: "ocodejs-account-auth",
       state: "not_configured",
       ready: false,
+      providers,
       checkedAt
     }, 503);
   }
@@ -47,6 +48,7 @@ export async function GET() {
       service: "ocodejs-account-auth",
       state: "ready",
       ready: true,
+      providers,
       checkedAt
     }, 200);
   } catch {

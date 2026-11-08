@@ -1,0 +1,12 @@
+name = "ocodejs-token-vault-staging"
+main = "src/index.js"
+compatibility_date = "2026-11-07"
+workers_dev = true
+
+[vars]
+ACCESS_REQUIRED = "true"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "ocodejs-token-vault-staging"
+database_id = "f2a064c3-93ca-4cbe-8bbb-dcde16801398"
