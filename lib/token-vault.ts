@@ -39,3 +39,13 @@ export async function tokenVaultRequest<T>(
   if (!response.ok) throw new Error("Token Vault request failed (" + response.status + ")");
   return await response.json() as T;
 }
+
+/** Server-only: resolves a user's credential for an upstream provider call. Never return this value from a Route Handler. */
+export async function resolveTokenForServer(user: VaultUser, tokenId: string): Promise<string> {
+  if (!/^[0-9a-f-]{36}$/i.test(tokenId)) throw new Error("Invalid credential ID");
+  const result = await tokenVaultRequest<{ value: string }>(
+    user, "/api/service/tokens/" + tokenId + "/resolve", { method: "POST" }
+  );
+  if (typeof result.value !== "string") throw new Error("Credential unavailable");
+  return result.value;
+}
