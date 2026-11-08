@@ -5,6 +5,9 @@ import { signIn } from "next-auth/react";
 
 type Mode = "signin" | "signup";
 
+const googleEnabled = process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
+const githubEnabled = process.env.NEXT_PUBLIC_AUTH_GITHUB_ENABLED === "true";
+
 function GoogleIcon() {
   return <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="#4285F4" d="M21.35 11.1H12v2.98h5.35c-.5 2.4-2.5 3.5-5.35 3.5a5.6 5.6 0 1 1 0-11.2c1.4 0 2.6.5 3.55 1.35l2.1-2.1A8.6 8.6 0 0 0 12 3.4a8.6 8.6 0 1 0 0 17.2c4.95 0 8.6-3.5 8.6-8.4 0-.4-.05-.75-.1-1.1z"/></svg>;
 }
@@ -99,16 +102,16 @@ export default function Home() {
             </button>.
           </p>
 
-          <div className="oauth-stack">
-            <button className="oauth-button" type="button" onClick={() => provider("google")} disabled={busy}>
+          {(googleEnabled || githubEnabled) && <div className="oauth-stack">
+            {googleEnabled && <button className="oauth-button" type="button" onClick={() => provider("google")} disabled={busy}>
               <GoogleIcon /> {mode === "signin" ? "Log in with Google" : "Sign up with Google"}
-            </button>
-            <button className="oauth-button" type="button" onClick={() => provider("github")} disabled={busy}>
+            </button>}
+            {githubEnabled && <button className="oauth-button" type="button" onClick={() => provider("github")} disabled={busy}>
               <GitHubIcon /> {mode === "signin" ? "Log in with GitHub" : "Sign up with GitHub"}
-            </button>
-          </div>
+            </button>}
+          </div>}
 
-          <div className="or-divider"><span>or</span></div>
+          {(googleEnabled || githubEnabled) && <div className="or-divider"><span>or</span></div>}
 
           <form className="auth-form" onSubmit={submit}>
             {mode === "signup" && (
