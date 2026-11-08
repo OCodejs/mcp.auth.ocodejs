@@ -66,6 +66,9 @@ Do not use `prisma db push` against a shared or production database.
 | `/api/register` | POST | Register account and create profile transactionally |
 | `/api/auth/[...nextauth]` | GET, POST | Auth.js sign-in, callbacks, and session |
 | `/api/health` | GET | Configuration and PostgreSQL readiness |
+| `/api/vault/tokens` | GET, POST | Manage per-user encrypted BYOK credentials |
+| `/api/vault/tokens/[id]` | DELETE | Delete an owned credential |
+| `/api/vault/chat` | POST | Server-side OpenAI, Anthropic, and Gemini gateway using an owned key |
 | `/api/profile/me` | GET, PATCH | Read/update authenticated profile |
 | `/api/profile/github` | PATCH | Set public GitHub username |
 | `/api/profile/stars` | GET, POST, DELETE | Manage authenticated user's stars |
