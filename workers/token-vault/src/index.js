@@ -42,16 +42,17 @@ async function verifyAppAssertion(req, env) {
   if (parts.length !== 3) return null;
   try {
     const claims = JSON.parse(new TextDecoder().decode(unb64(parts[1])));
-    const valid = await crypto.subtle.verify(
-      "HMAC", await hmac(env.APP_ASSERTION_SECRET, "verify"),
-      unb64(parts[2]), enc.encode(parts[0] + "." + parts[1])
-    );
+    const valid = await crypto.subtle.verify("HMAC", await hmac(env.APP_ASSERTION_SECRET, "verify"), unb64(parts[2]), enc.encode(parts[0] + "." + parts[1]));
     const now = Math.floor(Date.now() / 1000);
     if (!valid || claims.iss !== "ocodejs-account" || claims.aud !== "ocodejs-token-vault" ||
         typeof claims.sub !== "string" || claims.sub.length < 1 || claims.sub.length > 255 ||
         !Number.isInteger(claims.exp) || claims.exp <= now || claims.exp > now + 90 ||
         !Number.isInteger(claims.iat) || claims.iat > now + 30 ||
         typeof claims.jti !== "string" || claims.jti.length < 12) return null;
+    try {
+      await env.DB.prepare("INSERT INTO service_assertions(jti,expires_at) VALUES(?,?)").bind(claims.jti, claims.exp).run();
+      await env.DB.prepare("DELETE FROM service_assertions WHERE expires_at < ?").bind(now).run();
+    } catch { return null; }
     return { subject: claims.sub };
   } catch { return null; }
 }
@@ -69,44 +70,34 @@ async function serviceWriteAllowed(env, subject, action) {
 }
 async function serviceRoute(req, env, service) {
   const subject = service.subject;
-  await env.DB.prepare("INSERT OR IGNORE INTO identities(id,subject,role,active) VALUES(?,?,'developer',1)")
-    .bind(crypto.randomUUID(), subject).run();
+  await env.DB.prepare("INSERT OR IGNORE INTO identities(id,subject,role,active) VALUES(?,?,'developer',1)").bind(crypto.randomUUID(), subject).run();
   const identity = await env.DB.prepare("SELECT active FROM identities WHERE subject=?").bind(subject).first();
   if (!identity || !identity.active) return json({ error: "Account disabled" }, 403);
-
-  if (req.method === "GET" && new URL(req.url).pathname === "/api/service/tokens") {
-    const rows = await env.DB.prepare(
-      "SELECT id,label,provider,created_at,rotated_at FROM vault_tokens WHERE owner_subject=? ORDER BY created_at DESC LIMIT 100"
-    ).bind(subject).all();
+  const path = new URL(req.url).pathname;
+  if (req.method === "GET" && path === "/api/service/tokens") {
+    const rows = await env.DB.prepare("SELECT id,label,provider,created_at,rotated_at FROM vault_tokens WHERE owner_subject=? ORDER BY created_at DESC LIMIT 100").bind(subject).all();
     return json({ tokens: rows.results });
   }
-
-  if (req.method === "POST" && new URL(req.url).pathname === "/api/service/tokens") {
+  if (req.method === "POST" && path === "/api/service/tokens") {
     if (!await serviceWriteAllowed(env, subject, "create")) return json({ error: "Rate limit exceeded" }, 429);
     let body; try { body = await req.json(); } catch { return json({ error: "Invalid request" }, 400); }
     const providers = new Set(["openai", "google", "anthropic", "custom"]);
     if (typeof body.label !== "string" || !body.label.trim() || body.label.length > 100 ||
         typeof body.provider !== "string" || !providers.has(body.provider) ||
-        typeof body.value !== "string" || body.value.length < 8 || body.value.length > 8192) {
-      return json({ error: "Invalid credential" }, 400);
-    }
+        typeof body.value !== "string" || body.value.length < 8 || body.value.length > 8192) return json({ error: "Invalid credential" }, 400);
     const iv = crypto.getRandomValues(new Uint8Array(12));
     const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await key(env), enc.encode(body.value));
     const id = crypto.randomUUID();
     const projectId = "user-" + subject.replace(/[^a-zA-Z0-9._-]/g, "").slice(0, 48);
-    await env.DB.prepare(
-      "INSERT INTO vault_tokens(id,label,provider,project_id,ciphertext,iv,created_by,owner_subject) VALUES(?,?,?,?,?,?,?,?)"
-    ).bind(id, body.label.trim().slice(0, 100), body.provider, projectId, b64(ciphertext), b64(iv), subject, subject).run();
+    await env.DB.prepare("INSERT INTO vault_tokens(id,label,provider,project_id,ciphertext,iv,created_by,owner_subject) VALUES(?,?,?,?,?,?,?,?)")
+      .bind(id, body.label.trim().slice(0, 100), body.provider, projectId, b64(ciphertext), b64(iv), subject, subject).run();
     await audit(env, subject, "user.token.create", id);
     return json({ id }, 201);
   }
-
-  const resolve = new URL(req.url).pathname.match(/^\/api\/service\/tokens\/([0-9a-f-]{36})\/resolve$/i);
+  const resolve = path.match(/^\/api\/service\/tokens\/([0-9a-f-]{36})\/resolve$/i);
   if (req.method === "POST" && resolve) {
     if (!await serviceWriteAllowed(env, subject, "resolve")) return json({ error: "Rate limit exceeded" }, 429);
-    const row = await env.DB.prepare(
-      "SELECT ciphertext,iv FROM vault_tokens WHERE id=? AND owner_subject IS NULL AND owner_subject=?"
-    ).bind(resolve[1], subject).first();
+    const row = await env.DB.prepare("SELECT ciphertext,iv FROM vault_tokens WHERE id=? AND owner_subject IS NULL AND owner_subject=?").bind(resolve[1], subject).first();
     if (!row) return json({ error: "Not found" }, 404);
     try {
       const clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(row.iv) }, await key(env), unb64(row.ciphertext));
@@ -117,18 +108,15 @@ async function serviceRoute(req, env, service) {
       return json({ error: "Unable to resolve credential" }, 500);
     }
   }
-
-  const remove = new URL(req.url).pathname.match(/^\/api\/service\/tokens\/([0-9a-f-]{36})$/i);
+  const remove = path.match(/^\/api\/service\/tokens\/([0-9a-f-]{36})$/i);
   if (req.method === "DELETE" && remove) {
     if (!await serviceWriteAllowed(env, subject, "delete")) return json({ error: "Rate limit exceeded" }, 429);
-    const result = await env.DB.prepare("DELETE FROM vault_tokens WHERE id=? AND owner_subject IS NULL AND owner_subject=?")
-      .bind(remove[1], subject).run();
+    const result = await env.DB.prepare("DELETE FROM vault_tokens WHERE id=? AND owner_subject IS NULL AND owner_subject=?").bind(remove[1], subject).run();
     await audit(env, subject, "user.token.delete", remove[1], result.meta?.changes ? "success" : "not_found");
     return json({ ok: true });
   }
   return json({ error: "Not found" }, 404);
 }
-
 async function sign(id, secret) {
   return id + "." + b64(await crypto.subtle.sign("HMAC", await hmac(secret, "sign"), enc.encode(id)));
 }
@@ -281,13 +269,13 @@ async function route(req, env, ctx) {
       const grant = await agentGrant(env, agent.id, projectId);
       if (!grant) return json({ error: "Forbidden" }, 403);
       const rows = await env.DB.prepare(
-        "SELECT id,label,provider,project_id,created_at FROM vault_tokens WHERE project_id=? ORDER BY created_at DESC LIMIT 200"
+        "SELECT id,label,provider,project_id,created_at FROM vault_tokens WHERE project_id=? AND owner_subject IS NULL ORDER BY created_at DESC LIMIT 200"
       ).bind(projectId).all();
       return json({ tokens: rows.results, permission: grant.permission });
     }
     const agentReveal = path.match(/^\/api\/agent\/tokens\/([0-9a-f-]+)\/reveal$/i);
     if (req.method === "POST" && agentReveal) {
-      const row = await env.DB.prepare("SELECT id,project_id,ciphertext,iv FROM vault_tokens WHERE id=?")
+      const row = await env.DB.prepare("SELECT id,project_id,ciphertext,iv FROM vault_tokens WHERE id=? AND owner_subject IS NULL")
         .bind(agentReveal[1]).first();
       if (!row) return json({ error: "Not found" }, 404);
       const grant = await agentGrant(env, agent.id, row.project_id);
@@ -326,7 +314,166 @@ async function route(req, env, ctx) {
   if (req.method === "POST" && path === "/api/members") {
     if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
     let body; try { body = await req.json(); } catch { return json({ error: "Invalid request" }, 400); }
-    const email = typeof body.email === "string" ? body.email.trim().t
+    const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+    const role = body.role;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254 ||
+        !["security_admin", "developer", "auditor"].includes(role)) {
+      return json({ error: "Invalid member email or role" }, 400);
+    }
+    try {
+      await env.DB.prepare("INSERT INTO identities(id,subject,role,active) VALUES(?,?,?,1)")
+        .bind(crypto.randomUUID(), email, role).run();
+    } catch {
+      return json({ error: "Member already exists or could not be created" }, 409);
+    }
+    await audit(env, user.subject, "member.create", email);
+    return json({ ok: true, email, role }, 201);
+  }
+  const memberPath = path.match(/^\/api\/members\/(.+)$/);
+  if (memberPath && req.method === "PATCH") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    const email = decodeURIComponent(memberPath[1]).trim().toLowerCase();
+    let body; try { body = await req.json(); } catch { return json({ error: "Invalid request" }, 400); }
+    if (email === "TOKEN" || !["security_admin", "developer", "auditor"].includes(body.role)) {
+      return json({ error: "Invalid member role" }, 400);
+    }
+    const result = await env.DB.prepare("UPDATE identities SET role=? WHERE subject=? AND role<>'ai_agent'")
+      .bind(body.role, email).run();
+    if (!result.meta?.changes) return json({ error: "Member not found" }, 404);
+    await audit(env, user.subject, "member.role.update", email);
+    return json({ ok: true });
+  }
+  if (memberPath && req.method === "DELETE") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    const email = decodeURIComponent(memberPath[1]).trim().toLowerCase();
+    if (email === "TOKEN") return json({ error: "Cannot revoke bootstrap owner" }, 400);
+    const check = await env.DB.prepare("SELECT active,role FROM identities WHERE subject=?").bind(email).first();
+    if (!check || check.role === "ai_agent") return json({ error: "Member not found" }, 404);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE identities SET active=0 WHERE subject=?").bind(email),
+      env.DB.prepare("UPDATE sessions SET revoked=1 WHERE subject=?").bind(email)
+    ]);
+    await audit(env, user.subject, "member.revoke", email);
+    return json({ ok: true, active: false });
+  }
 
---- TRUNCATED ---
-Response was ~8,370 tokens (limit: 6,000). Use more specific queries to reduce response size.
+
+  if (req.method === "GET" && path === "/api/agents") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    const rows = await env.DB.prepare(
+      "SELECT c.id,c.subject,c.active,c.expires_at,c.last_used_at,c.created_at FROM agent_credentials c ORDER BY c.created_at DESC"
+    ).all();
+    return json({ agents: rows.results });
+  }
+  if (req.method === "POST" && path === "/api/agents") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    let body; try { body = await req.json(); } catch { return json({ error: "Invalid request" }, 400); }
+    const subject = typeof body.subject === "string" ? body.subject.trim() : "";
+    const days = Number.isInteger(body.expires_in_days) ? body.expires_in_days : 90;
+    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{2,63}$/.test(subject) || subject === "TOKEN" || days < 1 || days > 365) {
+      return json({ error: "Invalid agent subject or expiry" }, 400);
+    }
+    const agentId = crypto.randomUUID();
+    const apiKey = "oca_" + b64(crypto.getRandomValues(new Uint8Array(32)));
+    const expiresAt = Math.floor(Date.now() / 1000) + days * 86400;
+    try {
+      await env.DB.batch([
+        env.DB.prepare("INSERT INTO identities(id,subject,role,active) VALUES(?,?, 'ai_agent',1)")
+          .bind(crypto.randomUUID(), subject),
+        env.DB.prepare("INSERT INTO agent_credentials(id,subject,key_hash,expires_at,created_by) VALUES(?,?,?,?,?)")
+          .bind(agentId, subject, await hash(apiKey), expiresAt, user.subject)
+      ]);
+    } catch {
+      return json({ error: "Agent identity already exists or could not be created" }, 409);
+    }
+    await audit(env, user.subject, "agent.create", agentId);
+    return json({ subject, api_key: apiKey, expires_at: expiresAt }, 201);
+  }
+  const agentGrantPath = path.match(/^\/api\/agents\/([a-zA-Z0-9._-]{3,64})\/grants$/);
+  if (agentGrantPath && req.method === "GET") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    const subject = agentGrantPath[1];
+    const rows = await env.DB.prepare(
+      "SELECT g.project_id,g.permission,g.created_at FROM agent_project_grants g JOIN agent_credentials c ON c.id=g.agent_id WHERE c.subject=? ORDER BY g.project_id"
+    ).bind(subject).all();
+    return json({ grants: rows.results });
+  }
+  if (agentGrantPath && req.method === "POST") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    let body; try { body = await req.json(); } catch { return json({ error: "Invalid request" }, 400); }
+    if (!validProject(body.project_id) || !["metadata", "reveal"].includes(body.permission)) {
+      return json({ error: "Invalid project grant" }, 400);
+    }
+    const agent = await env.DB.prepare("SELECT id FROM agent_credentials WHERE subject=? AND active=1")
+      .bind(agentGrantPath[1]).first();
+    if (!agent) return json({ error: "Agent not found" }, 404);
+    await env.DB.prepare(
+      "INSERT INTO agent_project_grants(agent_id,project_id,permission,created_by) VALUES(?,?,?,?) ON CONFLICT(agent_id,project_id) DO UPDATE SET permission=excluded.permission,created_by=excluded.created_by,created_at=strftime('%Y-%m-%dT%H:%M:%fZ','now')"
+    ).bind(agent.id, body.project_id, body.permission, user.subject).run();
+    await audit(env, user.subject, "agent.grant", agent.id + ":" + body.project_id);
+    return json({ ok: true });
+  }
+  const agentPath = path.match(/^\/api\/agents\/([a-zA-Z0-9._-]{3,64})$/);
+  if (agentPath && req.method === "DELETE") {
+    if (user.role !== "owner") return json({ error: "Forbidden" }, 403);
+    const subject = agentPath[1];
+    const agent = await env.DB.prepare("SELECT id FROM agent_credentials WHERE subject=?")
+      .bind(subject).first();
+    if (!agent) return json({ error: "Agent not found" }, 404);
+    await env.DB.batch([
+      env.DB.prepare("UPDATE identities SET active=0 WHERE subject=?").bind(subject),
+      env.DB.prepare("UPDATE agent_credentials SET active=0 WHERE subject=?").bind(subject)
+    ]);
+    await audit(env, user.subject, "agent.revoke", agent.id);
+    return json({ ok: true });
+  }
+
+  if (req.method === "GET" && path === "/api/tokens") {
+    const rows = await env.DB.prepare("SELECT id,label,provider,project_id,created_at,rotated_at FROM vault_tokens WHERE owner_subject IS NULL ORDER BY created_at DESC LIMIT 200").all();
+    return json({ tokens: rows.results });
+  }
+  if (req.method === "POST" && path === "/api/tokens") {
+    if (!PRIVILEGED.has(user.role)) return json({ error: "Forbidden" }, 403);
+    let body; try { body = await req.json(); } catch { return json({ error: "Invalid request" }, 400); }
+    const projectId = body.project_id || "ocodejs-core";
+    if (typeof body.label !== "string" || !body.label.trim() || typeof body.provider !== "string" || !body.provider.trim() ||
+        !validProject(projectId) || typeof body.value !== "string" || body.value.length < 8 || body.value.length > 8192) return json({ error: "Invalid token record" }, 400);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await key(env), enc.encode(body.value));
+    const id = crypto.randomUUID();
+    await env.DB.prepare("INSERT INTO vault_tokens(id,label,provider,project_id,ciphertext,iv,created_by) VALUES(?,?,?,?,?,?,?)")
+      .bind(id, body.label.trim().slice(0, 100), body.provider.trim().slice(0, 80), projectId, b64(ciphertext), b64(iv), user.subject).run();
+    await audit(env, user.subject, "token.create", id);
+    return json({ id }, 201);
+  }
+  const reveal = path.match(/^\/api\/tokens\/([0-9a-f-]+)\/reveal$/i);
+  if (req.method === "POST" && reveal) {
+    if (!PRIVILEGED.has(user.role)) return json({ error: "Forbidden" }, 403);
+    const limit = await rateLimit(req, env, "reveal");
+    if (!limit.ok) return json({ error: "Too many reveal attempts" }, 429);
+    const row = await env.DB.prepare("SELECT ciphertext,iv FROM vault_tokens WHERE id=?").bind(reveal[1]).first();
+    if (!row) { await audit(env, user.subject, "token.reveal", reveal[1], "not_found"); return json({ error: "Not found" }, 404); }
+    try {
+      const clear = await crypto.subtle.decrypt({ name: "AES-GCM", iv: unb64(row.iv) }, await key(env), unb64(row.ciphertext));
+      await audit(env, user.subject, "token.reveal", reveal[1]);
+      return json({ value: new TextDecoder().decode(clear) });
+    } catch {
+      await audit(env, user.subject, "token.reveal", reveal[1], "decrypt_failed");
+      return json({ error: "Unable to reveal credential" }, 500);
+    }
+  }
+  const remove = path.match(/^\/api\/tokens\/([0-9a-f-]+)$/i);
+  if (req.method === "DELETE" && remove) {
+    if (!PRIVILEGED.has(user.role)) return json({ error: "Forbidden" }, 403);
+    const result = await env.DB.prepare("DELETE FROM vault_tokens WHERE id=?").bind(remove[1]).run();
+    await audit(env, user.subject, "token.delete", remove[1], result.meta?.changes ? "success" : "not_found");
+    return json({ ok: true });
+  }
+  return json({ error: "Not found" }, 404);
+}
+export default {
+  async fetch(req, env, ctx) {
+    try { return await route(req, env, ctx); }
+    catch { return json({ error: "Vault temporarily unavailable" }, 503); }
+  }
+};
