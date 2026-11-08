@@ -27,6 +27,28 @@ OAuth callback URLs:
 - `https://YOUR-DOMAIN/api/auth/callback/google`
 - `https://YOUR-DOMAIN/api/auth/callback/github`
 
+## Secure BYOK / Token Vault
+
+The account area includes a server-mediated API key manager at `/account/keys`.
+Users can paste a provider key or import a supported `.env` / JSON file. File parsing
+happens locally in the browser; only the selected key value is sent over HTTPS to the
+server. The browser receives metadata only and cannot reveal a stored key.
+
+The Next.js server signs a short-lived (60-second) HS256 assertion using
+`TOKEN_VAULT_ASSERTION_SECRET`. The Cloudflare Token Vault verifies that assertion,
+scopes every operation to the immutable Auth.js user ID, and stores the credential
+using AES-GCM encryption in the dedicated Staging D1 database. The assertion secret
+must exist only in server-side Preview environment variables and the Staging Worker
+secret store. Do not add it to `NEXT_PUBLIC_*`, source control, client bundles, or logs.
+
+Required Preview-only settings:
+- `TOKEN_VAULT_URL`: the dedicated OCode.js Token Vault Staging Worker URL.
+- `TOKEN_VAULT_ASSERTION_SECRET`: shared HMAC key, configured as a Vercel encrypted Preview variable and a Cloudflare Worker secret.
+
+The service API never returns plaintext keys to the browser. The admin Vault view is
+kept separate from user-owned credentials. Do not enable Production until security
+tests, provider proxy integration, and secret-redaction checks pass.
+
 ## Local development
 
 1. Install dependencies: `npm install`.
