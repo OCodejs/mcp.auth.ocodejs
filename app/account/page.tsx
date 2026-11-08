@@ -31,6 +31,11 @@ export default async function AccountPage() {
             <a href="/account/profile" style={{ display: "block", color: "#999", fontSize: 10, marginTop: 10 }}>EDIT PROFILE →</a>
           </div>
           <div style={{ padding: "18px 0", borderBottom: "1px solid #292929" }}>
+            <div style={{ color: "#777", fontSize: 10, marginBottom: 8 }}>SECURE API KEYS</div>
+            <a href="/account/keys" style={{ color: "#c5d6ff", fontSize: 13 }}>Quản lý API Key Vault →</a>
+            <div style={{ color: "#777", fontSize: 10, marginTop: 8 }}>BYOK · mã hóa phía máy chủ · tách biệt theo tài khoản</div>
+          </div>
+          <div style={{ padding: "18px 0", borderBottom: "1px solid #292929" }}>
             <div style={{ color: "#777", fontSize: 10, marginBottom: 8 }}>TÊN HIỂN THỊ</div>
             <div style={{ fontSize: 13, overflowWrap: "anywhere" }}>{session.user.name || "Người dùng"}</div>
           </div>
