@@ -1,7 +1,7 @@
 "use client";
 
-import { FormEvent, useState } from "react";
-import { signIn } from "next-auth/react";
+import { FormEvent, useEffect, useState } from "react";
+import { getProviders, signIn } from "next-auth/react";
 
 type Mode = "signin" | "signup";
 
@@ -27,6 +27,15 @@ function getCallbackUrl() {
 
 export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
   const [mode, setMode] = useState<Mode>(initialMode);
+  const [providers, setProviders] = useState({ google: googleEnabled, github: githubEnabled });
+
+  useEffect(() => {
+    let active = true;
+    getProviders().then((available) => {
+      if (active) setProviders({ google: Boolean(available?.google), github: Boolean(available?.github) });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -107,16 +116,16 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
             </button>.
           </p>
 
-          {(googleEnabled || githubEnabled) && <div className="oauth-stack">
-            {googleEnabled && <button className="oauth-button" type="button" onClick={() => provider("google")} disabled={busy}>
+          {(providers.google || providers.github) && <div className="oauth-stack">
+            {providers.google && <button className="oauth-button" type="button" onClick={() => provider("google")} disabled={busy}>
               <GoogleIcon /> {mode === "signin" ? "Log in with Google" : "Sign up with Google"}
             </button>}
-            {githubEnabled && <button className="oauth-button" type="button" onClick={() => provider("github")} disabled={busy}>
+            {providers.github && <button className="oauth-button" type="button" onClick={() => provider("github")} disabled={busy}>
               <GitHubIcon /> {mode === "signin" ? "Log in with GitHub" : "Sign up with GitHub"}
             </button>}
           </div>}
 
-          {(googleEnabled || githubEnabled) && <div className="or-divider"><span>or</span></div>}
+          {(providers.google || providers.github) && <div className="or-divider"><span>or</span></div>}
 
           <form className="auth-form" onSubmit={submit}>
             {mode === "signup" && (
