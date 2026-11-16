@@ -79,7 +79,7 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
     setBusy(true);
     setMessage("");
     try {
-      await signIn(providerName, { callbackUrl: "/account" });
+      await signIn(providerName, { callbackUrl: getCallbackUrl() });
     } catch {
       setMessage("Không thể kết nối nhà cung cấp. Vui lòng thử lại sau.");
       setBusy(false);
