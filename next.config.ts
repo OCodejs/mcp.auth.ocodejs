@@ -1,6 +1,9 @@
 import type { NextConfig } from "next";
 
-const nextConfig: NextConfig = {\n  async rewrites() {\n    return { afterFiles: [{ source: "/:path*", destination: "/learning/index.html" }] };\n  },
+const nextConfig: NextConfig = {
+  async rewrites() {
+    return { afterFiles: [{ source: "/:path*", destination: "/learning/index.html" }] };
+  },
   poweredByHeader: false,
   experimental: {
     serverActions: { bodySizeLimit: "1mb" }
