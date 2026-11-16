@@ -1,0 +1,1 @@
+import { AuthForm } from "@/components/auth-form";\n\nexport default function SignInPage() {\n  return <AuthForm initialMode="signin" />;\n}\n
