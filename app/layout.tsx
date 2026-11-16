@@ -3,10 +3,10 @@ import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OCodeJS — Auth",
-  description: "Sign in or create your OCodeJS account.",
+  title: "OCODEJS — Học lập trình thực chiến",
+  description: "Nền tảng học lập trình thực chiến OCODEJS — học, xây dựng và phát triển sản phẩm.",
   applicationName: "OCodeJS",
-  robots: { index: false, follow: false }
+  robots: { index: true, follow: true }
 };
 
 export const viewport: Viewport = {
@@ -21,7 +21,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="vi">
       <body>
         {children}
         <Analytics />
