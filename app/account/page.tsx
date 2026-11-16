@@ -11,7 +11,7 @@ const panelStyle = {
 
 export default async function AccountPage() {
   const session = await auth();
-  if (!session?.user) redirect("/");
+  if (!session?.user) redirect("/dang-nhap?callbackUrl=/account");
   const profile = await ensureProfileForUser(prisma, session.user);
 
   return (
