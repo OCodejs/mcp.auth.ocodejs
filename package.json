@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && node scripts/preview-db-push.mjs && next build",
+    "build": "node scripts/preview-db-push.mjs && next build",
     "build:cloudflare": "prisma generate && opennextjs-cloudflare build",
     "start": "next start",
     "preview": "npm run build:cloudflare && opennextjs-cloudflare preview",
