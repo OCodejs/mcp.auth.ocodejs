@@ -1,0 +1,5 @@
+# The root Pages site is a small static landing page. The imported
+# documentation source under content/ is not part of that site and contains
+# GitHub Docs Liquid tags (for example {% data ... %}) unsupported by Jekyll.
+exclude:
+  - content/
