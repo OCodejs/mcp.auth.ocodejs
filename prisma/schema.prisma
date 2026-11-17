@@ -6,6 +6,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  schemas  = ["public", "auth_preview"]
 }
 
 model User {
@@ -20,6 +21,7 @@ model User {
   profile       Profile?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+  @@schema("auth_preview")
 }
 
 model Account {
@@ -36,6 +38,7 @@ model Account {
   session_state     String?
   user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
   @@id([provider, providerAccountId])
+  @@schema("auth_preview")
 }
 
 model Session {
@@ -43,6 +46,7 @@ model Session {
   userId       String
   expires      DateTime
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@schema("auth_preview")
 }
 
 model VerificationToken {
@@ -50,6 +54,7 @@ model VerificationToken {
   token      String   @unique
   expires    DateTime
   @@unique([identifier, token])
+  @@schema("auth_preview")
 }
 
 model Profile {
@@ -77,6 +82,7 @@ model Profile {
   activities        ProfileActivity[]
 
   @@index([isPublic, username])
+  @@schema("auth_preview")
 }
 
 model ProfileLink {
@@ -90,6 +96,7 @@ model ProfileLink {
   profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, sortOrder])
+  @@schema("auth_preview")
 }
 
 model ProfileFollow {
@@ -103,6 +110,7 @@ model ProfileFollow {
   @@unique([followerId, followedId])
   @@index([followedId, createdAt])
   @@index([followerId, createdAt])
+  @@schema("auth_preview")
 }
 
 model ProfileStar {
@@ -116,6 +124,7 @@ model ProfileStar {
   @@unique([profileId, resourceType, resourceId])
   @@index([profileId, createdAt])
   @@index([resourceType, resourceId])
+  @@schema("auth_preview")
 }
 
 model ProfileActivity {
@@ -130,5 +139,6 @@ model ProfileActivity {
   profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
 
   @@index([profileId, isPublic, createdAt])
+  @@schema("auth_preview")
 }
 
