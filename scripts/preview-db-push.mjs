@@ -1,30 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
+import { createPreviewSchema } from "./prisma-schema.mjs";
 
 const schemaPath = "prisma/schema.prisma";
 const previewSchemaPath = "prisma/.schema.preview.prisma";
 const isPreview = process.env.VERCEL_ENV === "preview";
 const pushPreviewSchema = process.env.AUTH_PREVIEW_DB_PUSH === "true";
-
-function createPreviewSchema(source) {
-  const datasource = source.match(/datasource\s+db\s*\{[\s\S]*?\n\}/);
-  if (!datasource) throw new Error("Prisma datasource block was not found.");
-
-  const previewDatasource = datasource[0].replace(
-    /\n\}$/,
-    '\n  schemas = ["public", "auth_preview"]\n}'
-  );
-  let output = source.replace(datasource[0], previewDatasource);
-  let modelCount = 0;
-
-  output = output.replace(/(^model\s+\w+\s*\{[\s\S]*?)(^\})/gm, (_match, body, close) => {
-    modelCount += 1;
-    return `${body.trimEnd()}\n  @@schema("auth_preview")\n${close}`;
-  });
-
-  if (modelCount === 0) throw new Error("No Prisma models were found.");
-  return output;
-}
 
 function runPrisma(args) {
   execFileSync("npx", ["prisma", ...args], {
