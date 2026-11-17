@@ -59,7 +59,7 @@ tests, provider proxy integration, and secret-redaction checks pass.
 4. Apply reviewed migrations to the development database: `npx prisma migrate deploy`.
 5. Start the app: `npm run dev`.
 
-Do not use `prisma db push` against the shared/public or Production schema. This Preview branch uses the isolated `auth_preview` schema in the Auth-only Prisma Postgres resource; Production remains on `public`.
+Do not use `prisma db push` against the shared/public or Production schema. The checked-in Prisma schema defaults to `public`; the Vercel Preview build creates a temporary schema variant that maps models to `auth_preview`. Production builds and the main branch generate the default `public` client.
 
 ## API overview
 
@@ -92,11 +92,11 @@ Health readiness does not prove OAuth callbacks or end-to-end registration work.
 
 ## Preview release gate
 
-This repository is linked to Vercel. Work on this branch is Preview-only. Before enabling end-to-end sign-up:
+This repository is linked to Vercel. Work on this branch is Preview-only.
 
-1. The current Vercel project has an Auth-only Prisma Postgres resource. This Preview branch maps its models to the isolated `auth_preview` schema while Production remains on `public`. This is logical schema isolation on the same Auth database instance, not a separate physical database; no Velclaw or other application's database is used.
-2. Keep the integration-managed `DATABASE_URL` and `DATABASE_URL_POOLED`; set `AUTH_PREVIEW_DB_PUSH=true` only for this branch's Vercel Preview target. Keep Google/GitHub sign-in disabled until provider credentials are configured.
-3. The Preview build runs `prisma db push` only when `VERCEL_ENV=preview` and `AUTH_PREVIEW_DB_PUSH=true`, scoped to `auth_preview`; it never runs on Production.
+1. The project uses an Auth-only Prisma Postgres resource. Preview maps its generated Prisma Client and models to the isolated `auth_preview` schema; Production and `main` generate the default `public` schema client. This is logical schema isolation on the same Auth database instance, not a separate physical Preview database; no Velclaw or other application's database is used.
+2. Keep integration-managed `DATABASE_URL` and `DATABASE_URL_POOLED`; set `AUTH_PREVIEW_DB_PUSH=true` only for this branch's Vercel Preview target. Keep Google/GitHub sign-in disabled until provider credentials are configured.
+3. The Preview build generates the `auth_preview` Prisma Client. It runs `prisma db push` only when `VERCEL_ENV=preview` and `AUTH_PREVIEW_DB_PUSH=true`; Production builds do not generate the Preview client or run that schema push.
 4. Verify health, email registration, duplicate-email handling, invalid credentials, Google/GitHub callbacks, session persistence, profile creation/editing, follow/unfollow, stars, activity, and logout.
 5. Confirm the deployment target is Preview, not Production.
 
