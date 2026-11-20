@@ -1,5 +1,4 @@
 import { createHmac } from "node:crypto";
-import { prisma } from "@/lib/prisma";
 
 type RawQueryClient = {
   $queryRaw<T = unknown>(query: TemplateStringsArray, ...values: unknown[]): Promise<T>;
@@ -49,7 +48,7 @@ export async function consumeRateLimit(
     throw new Error("AUTH_SECRET must contain at least 32 characters for rate-limit key derivation.");
   }
 
-  const client = options.client ?? prisma;
+  const client = options.client ?? (await import("@/lib/prisma")).prisma;
   const now = options.now ?? new Date();
   const windowStart = new Date(now.getTime() - windowSeconds * 1000);
   const expiresAt = new Date(now.getTime() + windowSeconds * 1000);
