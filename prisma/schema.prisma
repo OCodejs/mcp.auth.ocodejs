@@ -52,6 +52,15 @@ model VerificationToken {
   @@unique([identifier, token])
 }
 
+model RateLimitBucket {
+  key             String   @id
+  count           Int
+  windowStartedAt DateTime
+  expiresAt       DateTime
+
+  @@index([expiresAt])
+}
+
 model Profile {
   id                String           @id @default(cuid())
   userId            String           @unique
