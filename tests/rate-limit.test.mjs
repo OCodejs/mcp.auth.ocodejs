@@ -61,7 +61,7 @@ test("rate-limit starts a new fixed window after the previous window expires", a
     client: store, secret, now: new Date("2026-11-21T00:00:00.000Z")
   })).allowed, true);
   assert.equal((await consumeRateLimit("register", identifier, 1, 60, {
-    client: store, secret, now: new Date("2026-11-21T00:00:60.000Z")
+    client: store, secret, now: new Date("2026-11-21T00:01:00.000Z")
   })).allowed, true);
 });
 
