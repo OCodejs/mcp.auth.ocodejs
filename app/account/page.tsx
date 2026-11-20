@@ -54,7 +54,7 @@ export default async function AccountPage() {
         }}>
           <button type="submit" style={{ width: "100%", marginTop: 26, minHeight: 48, border: "1px solid #f5f5f5", background: "#f5f5f5", color: "#000", font: "inherit", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>ĐĂNG XUẤT</button>
         </form>
-        <a href="/" style={{ display: "block", marginTop: 22, color: "#888", textAlign: "center", fontSize: 10, textDecoration: "none" }}>← QUAY LẠI OCODEJS</a>
+        <a href="https://ocodejs.co/" style={{ display: "block", marginTop: 22, color: "#888", textAlign: "center", fontSize: 10, textDecoration: "none" }}>← QUAY LẠI OCODEJS CONTROL CENTER</a>
       </section>
       <footer style={{ borderTop: "1px solid #262626", padding: "18px 24px", color: "#666", fontSize: 9, letterSpacing: ".1em", textAlign: "center" }}>© 2026 OCODEJS · IDENTITY</footer>
     </main>
