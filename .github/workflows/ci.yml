@@ -33,8 +33,20 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
+      # package-lock.json is currently stale (Neon adapter in lockfile, pg adapter
+      # in package.json). Regenerate it on the hosted runner, retain it as an
+      # artifact for a reviewed repository update, then prove clean installation.
+      - name: Regenerate npm lockfile
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Upload generated lockfile for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: generated-package-lock-${{ github.run_id }}
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Install dependencies from lockfile
+        run: npm ci --no-audit --no-fund
       - name: Run unit tests
         run: npm test
       - name: Generate Prisma client
