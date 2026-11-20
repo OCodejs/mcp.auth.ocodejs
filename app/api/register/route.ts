@@ -3,6 +3,7 @@ import { hash } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ensureProfileForUser } from "@/lib/profiles";
+import { enforceAuthRateLimit } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -13,7 +14,6 @@ const registrationSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  // Reject cross-origin JSON submissions. A managed rate limiter is still required before public production use.
   const origin = request.headers.get("origin");
   if (origin) {
     try {
@@ -42,6 +42,14 @@ export async function POST(request: Request) {
 
   const email = parsed.data.email.toLowerCase();
   try {
+    const decision = await enforceAuthRateLimit(request, "register", email);
+    if (!decision.allowed) {
+      return NextResponse.json(
+        { error: "Quá nhiều yêu cầu đăng ký. Vui lòng thử lại sau." },
+        { status: 429, headers: { "Retry-After": String(decision.retryAfterSeconds) } }
+      );
+    }
+
     const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
     if (existing) {
       return NextResponse.json({ error: "Không thể tạo tài khoản với email này." }, { status: 409 });
@@ -55,6 +63,7 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch {
+    // Fail closed if the shared rate-limit store is unavailable.
     return NextResponse.json({ error: "Dịch vụ đăng ký tạm thời không khả dụng." }, { status: 503 });
   }
 }
