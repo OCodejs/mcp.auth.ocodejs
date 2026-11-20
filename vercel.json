@@ -3,5 +3,10 @@
   "framework": "nextjs",
   "installCommand": "npm install",
   "buildCommand": "npm run build",
-  "devCommand": "npm run dev"
+  "devCommand": "npm run dev",
+  "git": {
+    "deploymentEnabled": {
+      "fix/preview-db-target-guard-20261121": false
+    }
+  }
 }
