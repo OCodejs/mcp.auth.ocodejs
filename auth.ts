@@ -8,6 +8,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ensureProfileForUser } from "@/lib/profiles";
 import { createOptionalOidcProvider } from "@/lib/auth-oidc";
+import { enforceAuthRateLimit } from "@/lib/rate-limit";
 
 const credentialsSchema = z.object({
   email: z.string().trim().email().max(254),
@@ -35,10 +36,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
-      async authorize(raw) {
+      async authorize(raw, request) {
         const parsed = credentialsSchema.safeParse(raw);
         if (!parsed.success) return null;
         const email = parsed.data.email.toLowerCase();
+        const rateLimit = await enforceAuthRateLimit(request, "login", email);
+        if (!rateLimit.allowed) return null;
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user?.passwordHash) return null;
         const valid = await compare(parsed.data.password, user.passwordHash);
