@@ -12,7 +12,7 @@ function getDatabaseTarget(connectionString) {
   if (!url.host || !database) {
     throw new Error("Preview database host and database name must be present.");
   }
-  return { target: \`\${url.host}/\${database}\`, database };
+  return { target: url.host + "/" + database, database };
 }
 
 export function assertPreviewDatabaseTarget({
