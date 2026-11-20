@@ -11,7 +11,7 @@ function fakeStore() {
   return {
     buckets,
     async $queryRaw(strings, ...values) {
-      const [key, , now, expiresAt, windowStart, limit] = values;
+      const [key, now, expiresAt, windowStart, , , , , limit] = values;
       const current = buckets.get(key);
       if (!current || current.windowStartedAt <= windowStart) {
         buckets.set(key, { count: 1, windowStartedAt: now, expiresAt });
