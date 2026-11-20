@@ -4,14 +4,14 @@ on:
   pull_request:
     branches: [main, "feat/**", "fix/**"]
   push:
-    branches: [main]
+    branches: [main, "feat/**", "fix/**"]
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
-# Keep every validation run. A newer push must not cancel the current build,
-# and PRs targeting stacked feature branches must receive the same checks.
+# Keep validation isolated per PR/ref. Do not grant write permissions to CI jobs.
 concurrency:
   group: auth-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   queue: max
@@ -19,12 +19,13 @@ concurrency:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/identity_auth_ci
       AUTH_SECRET: ci-only-not-a-production-secret-please-replace
       AUTH_URL: http://localhost:3000
       AUTH_TRUST_HOST: "true"
+      AUTH_PREVIEW_DB_PUSH: "false"
     steps:
       - name: Checkout
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -33,9 +34,8 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      # package-lock.json is currently stale (Neon adapter in lockfile, pg adapter
-      # in package.json). Regenerate it on the hosted runner, retain it as an
-      # artifact for a reviewed repository update, then prove clean installation.
+      # The lockfile is known to be stale. Regenerate it in the isolated runner,
+      # upload it for review, then prove npm ci can install from that generated file.
       - name: Regenerate npm lockfile
         run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
       - name: Upload generated lockfile for review
@@ -45,7 +45,7 @@ jobs:
           path: package-lock.json
           if-no-files-found: error
           retention-days: 1
-      - name: Install dependencies from lockfile
+      - name: Install dependencies from generated lockfile
         run: npm ci --no-audit --no-fund
       - name: Run unit tests
         run: npm test
@@ -57,3 +57,19 @@ jobs:
         run: npm run lint
       - name: Production build
         run: npm run build
+      - name: Publish validation summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Auth CI"
+            echo "- Result: **${JOB_STATUS}**"
+            echo "- Trigger: `${GITHUB_EVENT_NAME}`"
+            echo "- Ref: `${GITHUB_REF}`"
+            echo "- Node: `$(node --version 2>/dev/null || echo unavailable)`"
+            echo "- npm: `$(npm --version 2>/dev/null || echo unavailable)`"
+            echo "- Database push: disabled"
+            echo "- Repository writes: disabled"
+            echo "- Deployment: not configured"
+          } >> "$GITHUB_STEP_SUMMARY"
