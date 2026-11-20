@@ -18,8 +18,9 @@ function digestBucket(secret: string, scope: string, identifier: string): string
 }
 
 export function getTrustedClientIp(request: Request): string | null {
-  const configuredHeader = process.env.AUTH_CLIENT_IP_HEADER ?? DEFAULT_CLIENT_IP_HEADER;
-  if (configuredHeader !== "cf-connecting-ip") {
+  const configuredHeader = process.env.AUTH_CLIENT_IP_HEADER;
+  if (!configuredHeader) return null;
+  if (configuredHeader !== DEFAULT_CLIENT_IP_HEADER) {
     throw new Error("AUTH_CLIENT_IP_HEADER must be cf-connecting-ip; configure only a trusted edge header.");
   }
   const value = request.headers.get(configuredHeader)?.trim();
