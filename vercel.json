@@ -6,7 +6,8 @@
   "devCommand": "npm run dev",
   "git": {
     "deploymentEnabled": {
-      "fix/preview-db-target-guard-20261121": false
+      "fix/preview-db-target-guard-20261121": false,
+      "fix/npm-lockfile-regeneration-20261121": false
     }
   }
 }
