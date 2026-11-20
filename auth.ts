@@ -7,6 +7,7 @@ import { compare } from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { ensureProfileForUser } from "@/lib/profiles";
+import { createOptionalOidcProvider } from "@/lib/auth-oidc";
 
 const credentialsSchema = z.object({
   email: z.string().trim().email().max(254),
@@ -27,6 +28,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.AUTH_GITHUB_ID,
       clientSecret: process.env.AUTH_GITHUB_SECRET
     })] : []),
+    ...createOptionalOidcProvider(),
     Credentials({
       name: "Email and password",
       credentials: {
