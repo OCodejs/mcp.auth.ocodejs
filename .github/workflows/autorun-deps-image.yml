@@ -1,0 +1,77 @@
+name: AutoRun dependency image
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full source commit SHA to label in the image
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # This label must identify a dedicated, ephemeral rootless builder.
+    # Do not replace with GitHub-hosted ubuntu or a general-purpose host.
+    runs-on: [self-hosted, linux, x64, autorun-builder, rootless-docker]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+
+      - name: Require an explicitly configured egress proxy
+        env:
+          HTTPS_PROXY: ${{ secrets.RUNNER_EGRESS_PROXY }}
+        run: |
+          test -n "$HTTPS_PROXY" || { echo "RUNNER_EGRESS_PROXY is not configured"; exit 1; }
+          test -z "${NO_PROXY:-}" || { echo "NO_PROXY must be empty on the builder"; exit 1; }
+          docker info --format '{{json .SecurityOptions}}' | grep -qi rootless
+
+      - name: Verify package manifest and lockfile
+        run: node scripts/verify-runner-deps.mjs
+
+      - name: Build dependency image
+        env:
+          HTTPS_PROXY: ${{ secrets.RUNNER_EGRESS_PROXY }}
+        run: |
+          LOCK_SHA256="$(sha256sum package-lock.json | cut -d' ' -f1)"
+          docker build --pull=false \
+            --file Dockerfile.autorun-deps \
+            --build-arg HTTPS_PROXY="$HTTPS_PROXY" \
+            --build-arg LOCK_SHA256="$LOCK_SHA256" \
+            --build-arg SOURCE_SHA="${{ inputs.source_sha }}" \
+            --tag ocodejs/mcp-auth-deps:"${{ inputs.source_sha }}" .
+
+      - name: Verify immutable digest and offline Prisma payload
+        run: |
+          docker image inspect ocodejs/mcp-auth-deps:"${{ inputs.source_sha }}" > image-inspect.json
+          docker run --rm --network none --read-only \
+            --tmpfs /tmp:rw,nosuid,nodev,noexec,size=32m \
+            --cap-drop ALL --security-opt no-new-privileges \
+            --pids-limit 64 --memory 512m --cpus 1 \
+            ocodejs/mcp-auth-deps:"${{ inputs.source_sha }}" \
+            node -e "require('/opt/auth/node_modules/@prisma/client'); console.log('offline-client-ok')"
+          docker image inspect --format '{{index .RepoDigests 0}}' \
+            ocodejs/mcp-auth-deps:"${{ inputs.source_sha }}" > image-digest.txt
+          test -s image-digest.txt
+
+      - name: Export image and provenance
+        run: |
+          docker save ocodejs/mcp-auth-deps:"${{ inputs.source_sha }}" -o mcp-auth-deps.tar
+          sha256sum mcp-auth-deps.tar image-digest.txt > SHA256SUMS
+          docker image inspect ocodejs/mcp-auth-deps:"${{ inputs.source_sha }}" > image-inspect.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcp-auth-offline-deps-${{ inputs.source_sha }}
+          path: |
+            mcp-auth-deps.tar
+            image-digest.txt
+            image-inspect.json
+            SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
