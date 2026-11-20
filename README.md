@@ -52,6 +52,13 @@ The service API never returns plaintext keys to the browser. The admin Vault vie
 kept separate from user-owned credentials. Do not enable Production until security
 tests, provider proxy integration, and secret-redaction checks pass.
 
+## Dependency lockfile policy
+
+- `package.json` is the source of truth for direct dependencies and scripts.
+- Keep `package-lock.json` synchronized with `package.json`; CI regenerates a candidate lockfile in an isolated runner, uploads it for review, then validates `npm ci` against that generated lockfile.
+- Commit a reviewed generated lockfile only after CI confirms tests, Prisma generation/validation, TypeScript checks, and the build.
+- Do not run database schema initialization from CI. The CI job uses an ephemeral local PostgreSQL URL and keeps `AUTH_PREVIEW_DB_PUSH=false`.
+
 ## Local development
 
 1. Install dependencies: `npm install`.
