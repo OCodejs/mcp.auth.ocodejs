@@ -15,7 +15,7 @@ test("Preview maps every Prisma model to auth_preview", () => {
   const modelCount = (schema.match(/^model\s+\w+\s*\{/gm) ?? []).length;
   const mappedCount = (preview.match(/@@schema\("auth_preview"\)/g) ?? []).length;
 
-  assert.equal(modelCount, 9);
+  assert.equal(modelCount, 10);
   assert.equal(mappedCount, modelCount);
   assert.match(preview, /schemas\s*=\s*\["public",\s*"auth_preview"\]/);
 });
