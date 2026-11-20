@@ -2,22 +2,24 @@ name: Auth CI
 
 on:
   pull_request:
-    branches: [main]
-  push:
     branches: [main, "feat/**", "fix/**"]
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
+# Keep every validation run. A newer push must not cancel the current build,
+# and PRs targeting stacked feature branches must receive the same checks.
 concurrency:
-  group: auth-ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: auth-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  queue: max
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/identity_auth_ci
       AUTH_SECRET: ci-only-not-a-production-secret-please-replace
@@ -30,6 +32,7 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+          cache: npm
       - name: Install dependencies
         run: npm install --no-audit --no-fund
       - name: Run unit tests
