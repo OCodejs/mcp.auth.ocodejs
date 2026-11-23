@@ -13,7 +13,7 @@ concurrency:
 jobs:
   validate:
     name: Auth validation / Velclaw isolated runner
-    # Requires a SECOND runner registration scoped to OCodejs, with labels:
+    # Requires a SECOND runner registration scoped to this repository, with labels:
     # self-hosted, linux, ARM64, ocodejs-ci.
     # Do not reuse the Velclaw organization registration across organizations.
     runs-on:
