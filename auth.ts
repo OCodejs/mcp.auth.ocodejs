@@ -15,8 +15,42 @@ const credentialsSchema = z.object({
   password: z.string().min(1).max(128)
 });
 
+const prismaAdapter = PrismaAdapter(prisma);
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: {
+    ...prismaAdapter,
+    async linkAccount(account) {
+      try {
+        return await prismaAdapter.linkAccount!(account);
+      } catch (error) {
+        // Two first-time callbacks can both create a user before one wins the
+        // unique (provider, providerAccountId) account insert. Never leave the
+        // losing, unlinked user/profile behind or authenticate it as the winner.
+        if ((error as { code?: string })?.code === "P2002") {
+          const winner = await prisma.account.findUnique({
+            where: {
+              provider_providerAccountId: {
+                provider: account.provider,
+                providerAccountId: account.providerAccountId
+              }
+            },
+            select: { userId: true }
+          });
+
+          if (winner && winner.userId !== account.userId) {
+            await prisma.user.deleteMany({
+              where: { id: account.userId, accounts: { none: {} } }
+            });
+            // Fail closed. The next authorization attempt resolves through
+            // getUserByAccount to the winning account rather than the loser.
+            throw new Error("This identity was linked by another sign-in attempt. Please retry sign-in.");
+          }
+        }
+        throw error;
+      }
+    }
+  },
   trustHost: true,
   session: { strategy: "jwt" },
   pages: { signIn: "/dang-nhap" },
