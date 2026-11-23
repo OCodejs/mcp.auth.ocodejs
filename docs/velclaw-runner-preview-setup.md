@@ -38,7 +38,7 @@ Use the repository URL and one-time registration token displayed by GitHub. Ente
 
 ```sh
 read -rsp "GitHub runner registration token: " RUNNER_TOKEN
-printf '\\n'
+printf '\n'
 ./config.sh --url https://github.com/OCodejs/mcp.auth.ocodejs \
   --token "$RUNNER_TOKEN" \
   --name velclaw-ocodejs-auth-preview \
