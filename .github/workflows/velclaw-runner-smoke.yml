@@ -1,0 +1,81 @@
+name: OCodeJS Auth - Velclaw Runner Preview
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ocodejs-auth-velclaw-runner-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Auth validation / Velclaw isolated runner
+    # Requires a SECOND runner registration scoped to OCodejs, with labels:
+    # self-hosted, linux, ARM64, ocodejs-ci.
+    # Do not reuse the Velclaw organization registration across organizations.
+    runs-on:
+      - self-hosted
+      - linux
+      - ARM64
+      - ocodejs-ci
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/identity_auth_ci
+      AUTH_SECRET: ci-only-not-a-production-secret-please-replace
+      AUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      AUTH_PREVIEW_DB_PUSH: "false"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Verify isolated runner
+        run: |
+          node --version
+          npm --version
+          uname -a
+          node -p "process.arch"
+          test "$(node -p 'process.arch')" = "arm64"
+      - name: Regenerate npm lockfile for validation
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Upload generated lockfile for review
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ocodejs-auth-velclaw-lock-${{ github.run_id }}
+          path: package-lock.json
+          if-no-files-found: error
+          retention-days: 1
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Unit tests
+        run: npm test
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Validate Prisma schema
+        run: npx prisma validate
+      - name: Type check and lint
+        run: npm run lint
+      - name: Build
+        run: npm run build
+      - name: Publish validation summary
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## OCodeJS Auth / Velclaw Runner Preview"
+            echo "- Result: **${JOB_STATUS}**"
+            echo "- Runner: ${RUNNER_NAME}"
+            echo "- OS/arch: $(uname -s)/$(node -p 'process.arch' 2>/dev/null || echo unavailable)"
+            echo "- Database push: disabled"
+            echo "- Repository writes: disabled"
+            echo "- Deployment: not configured"
+            echo "- Secrets: CI-only placeholders; no production credentials"
+          } >> "$GITHUB_STEP_SUMMARY"
