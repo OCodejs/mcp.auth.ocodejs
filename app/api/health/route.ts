@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createOptionalOidcProvider } from "@/lib/auth-oidc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,8 +25,22 @@ export async function GET() {
   const checkedAt = new Date().toISOString();
   const providers = {
     google: Boolean(process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET),
-    github: Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET)
+    github: Boolean(process.env.AUTH_GITHUB_ID && process.env.AUTH_GITHUB_SECRET),
+    oidc: false
   };
+
+  try {
+    providers.oidc = createOptionalOidcProvider().length > 0;
+  } catch {
+    return response({
+      service: "ocodejs-account-auth",
+      state: "invalid_provider_configuration",
+      ready: false,
+      providers,
+      checkedAt
+    }, 503);
+  }
+
   const configured = REQUIRED_AUTH_SETTINGS.every((key) => {
     const value = process.env[key];
     return typeof value === "string" && value.trim().length > 0;
@@ -56,6 +71,7 @@ export async function GET() {
       service: "ocodejs-account-auth",
       state: "unavailable",
       ready: false,
+      providers,
       checkedAt
     }, 503);
   }
