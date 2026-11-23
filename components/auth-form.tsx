@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { getProviders, signIn } from "next-auth/react";
 
 type Mode = "signin" | "signup";
+type AvailableProvider = { id: string; name: string };
 
 const googleEnabled = process.env.NEXT_PUBLIC_AUTH_GOOGLE_ENABLED === "true";
 const githubEnabled = process.env.NEXT_PUBLIC_AUTH_GITHUB_ENABLED === "true";
@@ -27,15 +28,7 @@ function getCallbackUrl() {
 
 export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
   const [mode, setMode] = useState<Mode>(initialMode);
-  const [providers, setProviders] = useState({ google: googleEnabled, github: githubEnabled });
-
-  useEffect(() => {
-    let active = true;
-    getProviders().then((available) => {
-      if (active) setProviders({ google: Boolean(available?.google), github: Boolean(available?.github) });
-    }).catch(() => undefined);
-    return () => { active = false; };
-  }, []);
+  const [providers, setProviders] = useState<AvailableProvider[]>([]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -43,6 +36,18 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
   const [updates, setUpdates] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    getProviders().then((available) => {
+      if (!active) return;
+      const enabled = Object.values(available ?? {})
+        .filter((provider) => provider.id !== "credentials")
+        .map((provider) => ({ id: provider.id, name: provider.name }));
+      setProviders(enabled);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -74,12 +79,12 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
     }
   }
 
-  async function provider(providerName: "google" | "github") {
+  async function provider(providerId: string) {
     if (busy) return;
     setBusy(true);
     setMessage("");
     try {
-      await signIn(providerName, { callbackUrl: getCallbackUrl() });
+      await signIn(providerId, { callbackUrl: getCallbackUrl() });
     } catch {
       setMessage("Không thể kết nối nhà cung cấp. Vui lòng thử lại sau.");
       setBusy(false);
@@ -92,11 +97,12 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
     setPassword("");
   }
 
+  const hasProviders = providers.length > 0;
+
   return (
     <main className="auth-page">
       <div className="auth-wrap">
         <a className="back-link" href="/" aria-label="Về trang chủ"><span aria-hidden="true">‹</span> Home</a>
-
         <div className="brand">
           <div className="brand-mark" aria-hidden="true">
             <svg width="34" height="34" viewBox="0 0 34 34" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="square">
@@ -116,16 +122,16 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
             </button>.
           </p>
 
-          {(providers.google || providers.github) && <div className="oauth-stack">
-            {providers.google && <button className="oauth-button" type="button" onClick={() => provider("google")} disabled={busy}>
-              <GoogleIcon /> {mode === "signin" ? "Log in with Google" : "Sign up with Google"}
-            </button>}
-            {providers.github && <button className="oauth-button" type="button" onClick={() => provider("github")} disabled={busy}>
-              <GitHubIcon /> {mode === "signin" ? "Log in with GitHub" : "Sign up with GitHub"}
-            </button>}
+          {hasProviders && <div className="oauth-stack">
+            {providers.map((item) => (
+              <button key={item.id} className="oauth-button" type="button" onClick={() => provider(item.id)} disabled={busy}>
+                {item.id === "google" ? <GoogleIcon /> : item.id === "github" ? <GitHubIcon /> : <span aria-hidden="true">↗</span>}
+                {mode === "signin" ? `Continue with ${item.name}` : `Sign up with ${item.name}`}
+              </button>
+            ))}
           </div>}
 
-          {(providers.google || providers.github) && <div className="or-divider"><span>or</span></div>}
+          {hasProviders && <div className="or-divider"><span>or</span></div>}
 
           <form className="auth-form" onSubmit={submit}>
             {mode === "signup" && (
@@ -157,7 +163,6 @@ export function AuthForm({ initialMode = "signin" }: { initialMode?: Mode }) {
           </form>
 
           {message && <p className="form-message" role="alert">{message}</p>}
-
           <p className="legal-copy">
             {mode === "signin" ? "By signing in, you agree to our " : "By signing up, you agree to our "}
             <a href="/terms">Terms</a>{mode === "signup" ? ", " : " and "}
