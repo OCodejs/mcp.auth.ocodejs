@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 export type OidcProviderEnvironment = Record<string, string | undefined>;
 
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
@@ -19,7 +21,7 @@ export function validateOidcIssuer(
   }
 
   const localDevelopmentHttp =
-    nodeEnv !== "production" &&
+    nodeEnv === "development" &&
     issuer.protocol === "http:" &&
     LOCAL_HOSTS.has(issuer.hostname);
 
@@ -49,8 +51,12 @@ export function createOptionalOidcProvider(
   const issuer = validateOidcIssuer(issuerValue);
   if (!issuer) return [];
 
+  // Auth.js persists the provider id in Account.provider. Namespace it by issuer
+  // so two issuers that emit the same subject can never share an account key.
+  const issuerKey = createHash("sha256").update(issuer).digest("hex").slice(0, 16);
+
   return [{
-    id: "ocodejs-oidc",
+    id: `ocodejs-oidc-${issuerKey}`,
     name: "Enterprise OIDC",
     type: "oidc" as const,
     issuer,
